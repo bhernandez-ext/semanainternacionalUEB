@@ -678,10 +678,16 @@ function loadEvents() {
 
 function subscribeToEventChanges() {
   db.channel('eventos-live')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'eventos' }, function() {
-      loadEvents();
-    })
-    .subscribe();
+    .on('postgres_changes',
+      { event: '*', schema: 'public', table: 'eventos' },
+      function(payload) {
+        console.log('[Agenda] Cambio detectado en eventos:', payload.eventType, payload.new && payload.new.id);
+        loadEvents();
+      }
+    )
+    .subscribe(function(status) {
+      console.log('[Agenda] Realtime status:', status);
+    });
 }
 
 function showLoading(on) {
