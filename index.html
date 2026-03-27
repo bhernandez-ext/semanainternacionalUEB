@@ -142,7 +142,8 @@ body{font-family:'Source Sans 3',sans-serif;background:var(--light);color:#2a2a2
 .cal-wrap{position:relative}
 .btn-cal{width:100%;padding:.42rem .55rem;background:transparent;border:1.5px solid #ddd;border-radius:8px;cursor:pointer;font-family:'Source Sans 3',sans-serif;font-size:.68rem;font-weight:600;color:#888;letter-spacing:.04em;display:flex;align-items:center;justify-content:center;gap:.3rem;transition:border-color .15s,color .15s;white-space:nowrap}
 .btn-cal:hover{border-color:var(--gold);color:var(--dark)}
-.cal-menu{position:absolute;bottom:calc(100% + 6px);right:0;background:var(--card);border-radius:8px;box-shadow:0 6px 24px rgba(0,0,0,.14);min-width:186px;overflow:hidden;z-index:200;border:1px solid #eee}
+.cal-menu{position:absolute;bottom:calc(100% + 6px);right:0;background:var(--card);border-radius:8px;box-shadow:0 6px 24px rgba(0,0,0,.14);min-width:180px;overflow:hidden;z-index:200;border:1px solid #eee}
+@media(max-width:700px){.cal-menu{right:auto;left:0;bottom:calc(100% + 4px)}}
 .cal-menu button{display:flex;flex-direction:column;width:100%;padding:.65rem 1rem;border:none;background:none;cursor:pointer;text-align:left;transition:background .15s}
 .cal-menu button:hover{background:#f5f0ea}
 .cal-menu button strong{font-size:.82rem;color:var(--dark)}
@@ -239,13 +240,31 @@ body{font-family:'Source Sans 3',sans-serif;background:var(--light);color:#2a2a2
 
 /* RESPONSIVE */
 @media(max-width:700px){
-  .event-card{grid-template-columns:72px 1fr}
-  .event-action{display:none}
-  .event-body{padding:.82rem .9rem}
+  .event-card{grid-template-columns:72px 1fr;grid-template-rows:auto auto}
+  .event-time{grid-row:1;grid-column:1}
+  .event-body{grid-row:1;grid-column:2;padding:.82rem .9rem}
+  .event-action{
+    grid-row:2;grid-column:1 / span 2;
+    display:flex;flex-direction:row;flex-wrap:wrap;
+    align-items:center;gap:.5rem;
+    padding:.75rem .9rem;
+    border-top:1px solid #f0ebe4;
+    background:#fdfaf7;
+  }
+  .btn-action{flex:1;min-width:120px;padding:.55rem .7rem;font-size:.74rem}
+  .cal-wrap{flex:none}
+  .btn-cal{padding:.42rem .65rem;font-size:.7rem}
+  .btn-wa{padding:.42rem .6rem}
   .form-row{grid-template-columns:1fr;gap:0}
   .mi-bar{justify-content:flex-start}
 }
-@media(max-width:480px){.modal-body{padding:1rem}.modal-header{padding:1.1rem 1.2rem}}
+@media(max-width:480px){
+  .modal-body{padding:1rem}
+  .modal-header{padding:1.1rem 1.2rem}
+  .event-card{grid-template-columns:64px 1fr}
+  .t-start,.t-single{font-size:.72rem}
+  .btn-action{font-size:.7rem}
+}
 </style>
 </head>
 <body>
