@@ -642,6 +642,7 @@ var currentMode      = null;   // 'registro' | 'asistencia'
 var currentFlow      = null;   // 'prereg'   | 'walkin'
 var currentWalkInDoc = null;
 var currentDocId     = null;   // doc verified in asistencia step 1
+var currentReturning = null;   // stored data for returning attendee
 var invExpanded      = {};
 var calMenuOpen      = null;
 var searchTerm       = '';
@@ -1104,7 +1105,7 @@ function openModal(id, mode) {
 function closeModal() {
   document.getElementById('modal').classList.remove('open');
   currentEventId = null; currentMode = null; currentFlow = null;
-  currentWalkInDoc = null; currentDocId = null;
+  currentWalkInDoc = null; currentDocId = null; currentReturning = null;
 }
 
 function setSection(id, show) {
@@ -1196,11 +1197,11 @@ function verificarDoc() {
   if (!doc) { alert('Ingresa tu n\u00famero de documento.'); return; }
 
   currentDocId = doc;
-  var msgEl    = document.getElementById('aMsg');
+  var msgEl = document.getElementById('aMsg');
   msgEl.textContent = 'Verificando...';
   msgEl.className   = 'a-msg';
 
-  // Check if already attended
+  // Step 1: already attended THIS event?
   db.from('asistencias')
     .select('id')
     .eq('evento_id', currentEventId)
@@ -1213,27 +1214,48 @@ function verificarDoc() {
         return;
       }
 
-      // Check if pre-registered
+      // Step 2: pre-registered for THIS event?
       db.from('registros')
-        .select('nombre, tipo_participante')
+        .select('nombre, unidad_academica, tipo_participante, programa, creser, tipo_doc, email')
         .eq('evento_id', currentEventId)
         .eq('doc_id', doc)
         .maybeSingle()
         .then(function(rres) {
-          msgEl.textContent = '';
           if (rres.data) {
+            msgEl.textContent = '';
             currentFlow = 'prereg';
             setSection('asisVerify', false);
             showEvalSection(doc, rres.data.nombre.split(' ')[0]);
-          } else {
-            currentFlow      = 'walkin';
-            currentWalkInDoc = doc;
-            document.getElementById('wiDoc').value = doc;
-            clearWalkInForm();
-            setSection('asisVerify', false);
-            setSection('asisWalkIn', true);
-            setTimeout(function() { document.getElementById('wiNombre').focus(); }, 100);
+            return;
           }
+
+          // Step 3: attended ANY other event before? (returning attendee)
+          db.from('asistencias')
+            .select('nombre, unidad_academica, tipo_participante, programa, creser, tipo_doc, email')
+            .eq('doc_id', doc)
+            .limit(1)
+            .then(function(prev) {
+              msgEl.textContent = '';
+              if (prev.data && prev.data.length) {
+                // We have their data — skip to eval, reuse stored info
+                var stored       = prev.data[0];
+                currentFlow      = 'returning';
+                currentWalkInDoc = doc;
+                currentReturning = stored;
+                var firstName    = (stored.nombre || '').split(' ')[0];
+                setSection('asisVerify', false);
+                showEvalSection(doc, firstName);
+              } else {
+                // True walk-in: never seen this person
+                currentFlow      = 'walkin';
+                currentWalkInDoc = doc;
+                document.getElementById('wiDoc').value = doc;
+                clearWalkInForm();
+                setSection('asisVerify', false);
+                setSection('asisWalkIn', true);
+                setTimeout(function() { document.getElementById('wiNombre').focus(); }, 100);
+              }
+            });
         });
     });
 }
@@ -1287,7 +1309,10 @@ function showEvalSection(docId, firstName) {
   resetEvalForm();
 
   var greet = document.getElementById('evalGreet');
-  if (greet) greet.textContent = 'Hola, ' + firstName + '. Completa la evaluaci\u00f3n para registrar tu asistencia.';
+  var isRet  = (currentFlow === 'returning');
+  if (greet) greet.textContent = isRet
+    ? 'Hola de nuevo, ' + firstName + '! Como ya tienes registro previo, solo completa la evaluaci\u00f3n.'
+    : 'Hola, ' + firstName + '. Completa la evaluaci\u00f3n para registrar tu asistencia.';
 
   // Check canal_difusion — once per person across all events
   db.from('asistencias')
@@ -1373,7 +1398,41 @@ function submitEval() {
   var btn   = document.querySelector('#evalSection .btn-submit');
   if (btn) { btn.disabled = true; btn.textContent = 'Guardando...'; }
 
-  // Find the registro for this person + event to link it
+  function doInsert(personData, registroId, isWalkIn) {
+    db.from('asistencias').insert({
+      evento_id:            currentEventId,
+      registro_id:          registroId || null,
+      doc_id:               doc,
+      nombre:               personData.nombre           || null,
+      tipo_doc:             personData.tipo_doc         || null,
+      email:                personData.email            || null,
+      unidad_academica:     personData.unidad_academica || null,
+      tipo_participante:    personData.tipo_participante|| null,
+      programa:             personData.programa         || null,
+      creser:               personData.creser           || null,
+      walk_in:              isWalkIn,
+      canal_difusion:       eval_.canal_difusion        || null,
+      calificacion_general: eval_.calificacion_general,
+      aspecto_contenido:    eval_.aspecto_contenido,
+      aspecto_logistica:    eval_.aspecto_logistica,
+      competencias_globales:eval_.competencias_globales,
+      pais_sugerido:        eval_.pais_sugerido,
+      comentarios:          eval_.comentarios
+    }).then(function(ires) {
+      if (btn) { btn.disabled = false; btn.textContent = 'Registrar asistencia'; }
+      if (ires.error) { showModalError('Error: ' + ires.error.message); return; }
+      setSection('evalSection', false);
+      showSuccess('\u00a1Asistencia registrada!', 'Gracias por tu participaci\u00f3n y por completar la evaluaci\u00f3n.');
+    });
+  }
+
+  if (currentFlow === 'returning' && currentReturning) {
+    // Reuse data from a previous event attendance — no DB lookup needed
+    doInsert(currentReturning, null, true);
+    return;
+  }
+
+  // Pre-registered: find the registro to link it
   db.from('registros')
     .select('id, nombre, unidad_academica, tipo_participante, programa, creser, tipo_doc, email')
     .eq('evento_id', currentEventId)
@@ -1381,31 +1440,7 @@ function submitEval() {
     .maybeSingle()
     .then(function(rres) {
       var reg = rres.data || {};
-      db.from('asistencias').insert({
-        evento_id:            currentEventId,
-        registro_id:          reg.id || null,
-        doc_id:               doc,
-        nombre:               reg.nombre || null,
-        tipo_doc:             reg.tipo_doc || null,
-        email:                reg.email || null,
-        unidad_academica:     reg.unidad_academica || null,
-        tipo_participante:    reg.tipo_participante || null,
-        programa:             reg.programa || null,
-        creser:               reg.creser || null,
-        walk_in:              false,
-        canal_difusion:       eval_.canal_difusion || null,
-        calificacion_general: eval_.calificacion_general,
-        aspecto_contenido:    eval_.aspecto_contenido,
-        aspecto_logistica:    eval_.aspecto_logistica,
-        competencias_globales:eval_.competencias_globales,
-        pais_sugerido:        eval_.pais_sugerido,
-        comentarios:          eval_.comentarios
-      }).then(function(ires) {
-        if (btn) { btn.disabled = false; btn.textContent = 'Registrar asistencia'; }
-        if (ires.error) { showModalError('Error: ' + ires.error.message); return; }
-        setSection('evalSection', false);
-        showSuccess('\u00a1Asistencia registrada!', 'Gracias por tu participaci\u00f3n y por completar la evaluaci\u00f3n.');
-      });
+      doInsert(reg, reg.id || null, false);
     });
 }
 
