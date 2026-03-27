@@ -666,6 +666,13 @@ function loadEvents() {
       (res.data || []).forEach(function(ev) {
         if (EVENTS_BY_DAY[ev.dia]) EVENTS_BY_DAY[ev.dia].push(ev);
       });
+      // Sort each day by fecha_inicio so hour edits from monitor reflect immediately
+      ['d1','d2','d3'].forEach(function(day) {
+        EVENTS_BY_DAY[day].sort(function(a,b) {
+          if (a.fecha_inicio && b.fecha_inicio) return new Date(a.fecha_inicio) - new Date(b.fecha_inicio);
+          return (a.orden||0) - (b.orden||0);
+        });
+      });
       eventsLoaded = true;
       renderAll();
     })
@@ -999,7 +1006,7 @@ function shareWA(id) {
     + day + hora + '\n'
     + ev.lugar + '\n\n'
     + (ev.descripcion||'') + '\n\n'
-    + 'M\u00e1s info y registro: https://bit.ly/si-turkiye-ueb';
+    + 'M\u00e1s info y registro: https://n9.cl/ppdrg';
   window.open('https://wa.me/?text=' + enc(msg), '_blank');
 }
 
